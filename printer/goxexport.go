@@ -3,7 +3,6 @@ package printer
 import (
 	"strconv"
 	"strings"
-
 	"unicode"
 
 	"github.com/8byt/gox/ast"
@@ -61,7 +60,7 @@ var eventMap = map[string]string{
 var attrMap = map[string]string{
 	"autofocus":   "autofocus",
 	"checked":     "checked",
-	"class":       "className",
+	"class":       "class",
 	"for":         "htmlFor",
 	"href":        "href",
 	"id":          "id",
@@ -71,11 +70,11 @@ var attrMap = map[string]string{
 	"value":       "value",
 }
 
-func goxToVecty(gox *ast.GoxExpr) ast.Expr {
+func goxToVecty(genname string, gox *ast.GoxExpr) ast.Expr {
 	isComponent := unicode.IsUpper(rune(gox.TagName.Name[0]))
 
 	if isComponent {
-		return newComponent(gox)
+		return newComponent(genname, gox)
 	} else {
 		args := []ast.Expr{
 			&ast.BasicLit{
@@ -86,8 +85,8 @@ func goxToVecty(gox *ast.GoxExpr) ast.Expr {
 		if len(gox.Attrs) > 0 {
 			// Create markup expr and add attributes
 			markup := newCallExpr(
-				newSelectorExpr("vecty", "Markup"),
-				mapProps(gox.Attrs),
+				newSelectorExpr(genname, "Markup"),
+				mapProps(genname, gox.Attrs),
 			)
 
 			// Add the markup
@@ -103,7 +102,7 @@ func goxToVecty(gox *ast.GoxExpr) ast.Expr {
 			// Fallback to regular behavior, don't wrap this yet
 			//case *ast.GoExpr:
 			//	e := newCallExpr(
-			//		newSelectorExpr("vecty", "Text"),
+			//		newSelectorExpr(genname, "Text"),
 			//		[]ast.Expr{expr},
 			//	)
 			//	args = append(args, e)
@@ -113,7 +112,13 @@ func goxToVecty(gox *ast.GoxExpr) ast.Expr {
 					continue
 				}
 				e := newCallExpr(
-					newSelectorExpr("vecty", "Text"),
+					newSelectorExpr(genname, "Text"),
+					[]ast.Expr{expr},
+				)
+				args = append(args, e)
+			case *ast.GoExpr:
+				e := newCallExpr(
+					newSelectorExpr(genname, "Value"),
 					[]ast.Expr{expr},
 				)
 				args = append(args, e)
@@ -123,7 +128,7 @@ func goxToVecty(gox *ast.GoxExpr) ast.Expr {
 		}
 
 		return newCallExpr(
-			newSelectorExpr("vecty", "Tag"),
+			newSelectorExpr(genname, "Tag"),
 			args,
 		)
 	}
@@ -142,7 +147,7 @@ func newCallExpr(fun ast.Expr, args []ast.Expr) *ast.CallExpr {
 		Ellipsis: token.NoPos, Lparen: token.NoPos, Rparen: token.NoPos}
 }
 
-func newComponent(gox *ast.GoxExpr) *ast.UnaryExpr {
+func newComponent(genname string, gox *ast.GoxExpr) ast.Expr {
 	var args []ast.Expr
 	for _, attr := range gox.Attrs {
 		if attr.Rhs == nil { // default to true like JSX
@@ -157,19 +162,43 @@ func newComponent(gox *ast.GoxExpr) *ast.UnaryExpr {
 		args = append(args, expr)
 	}
 
-	return &ast.UnaryExpr{
-		OpPos: token.NoPos,
-		Op:    token.AND,
-		X: &ast.CompositeLit{
-			Type:   ast.NewIdent(gox.TagName.Name),
-			Lbrace: token.NoPos,
-			Elts:   args,
-			Rbrace: token.NoPos,
-		},
+	if len(gox.X) != 0 {
+		expr := &ast.KeyValueExpr{
+			Key:   ast.NewIdent("Body"),
+			Colon: token.NoPos,
+			Value: newCallExpr(
+				newSelectorExpr(genname, "Text"),
+				append([]ast.Expr{
+					&ast.BasicLit{
+						ValuePos: token.NoPos,
+						Value:    `""`,
+						Kind:     token.STRING,
+					},
+				}, gox.X...),
+			),
+		}
+
+		args = append(args, expr)
 	}
+
+	return newCallExpr(
+		newSelectorExpr(genname, "NewComponent"),
+		[]ast.Expr{
+			&ast.UnaryExpr{
+				OpPos: token.NoPos,
+				Op:    token.AND,
+				X: &ast.CompositeLit{
+					Type:   ast.NewIdent(gox.TagName.Name),
+					Lbrace: token.NoPos,
+					Elts:   args,
+					Rbrace: token.NoPos,
+				},
+			},
+		},
+	)
 }
 
-func mapProps(goxAttrs []*ast.GoxAttrStmt) []ast.Expr {
+func mapProps(genname string, goxAttrs []*ast.GoxAttrStmt) []ast.Expr {
 	var mapped = []ast.Expr{}
 	for _, attr := range goxAttrs {
 		// set default of Rhs to true if none provided
@@ -181,11 +210,11 @@ func mapProps(goxAttrs []*ast.GoxAttrStmt) []ast.Expr {
 
 		// if prop is an event listener (e.g. "onClick")
 		if _, ok := eventMap[attr.Lhs.Name]; ok {
-			expr = newEventListener(attr)
+			expr = newEventListener(genname, attr)
 		} else if mappedName, ok := attrMap[attr.Lhs.Name]; ok {
 			// if it's a vecty controlled prop
 			expr = newCallExpr(
-				newSelectorExpr("vecty", "Property"),
+				newSelectorExpr(genname, "Property"),
 				[]ast.Expr{
 					&ast.BasicLit{
 						Kind:  token.STRING,
@@ -196,7 +225,7 @@ func mapProps(goxAttrs []*ast.GoxAttrStmt) []ast.Expr {
 		} else {
 			// if prop is a normal attribute
 			expr = newCallExpr(
-				newSelectorExpr("vecty", "Attribute"),
+				newSelectorExpr(genname, "Attribute"),
 				[]ast.Expr{
 					&ast.BasicLit{
 						Kind:  token.STRING,
@@ -212,12 +241,12 @@ func mapProps(goxAttrs []*ast.GoxAttrStmt) []ast.Expr {
 	return mapped
 }
 
-func newEventListener(goxAttr *ast.GoxAttrStmt) ast.Expr {
+func newEventListener(genname string, goxAttr *ast.GoxAttrStmt) ast.Expr {
 	return &ast.UnaryExpr{
 		OpPos: token.NoPos,
 		Op:    token.AND,
 		X: &ast.CompositeLit{
-			Type:   newSelectorExpr("vecty", "EventListener"),
+			Type:   newSelectorExpr(genname, "EventListener"),
 			Lbrace: token.NoPos,
 			Elts: []ast.Expr{
 				&ast.KeyValueExpr{

@@ -10,12 +10,11 @@ package printer
 
 import (
 	"bytes"
+	"html"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-
-	"html"
 
 	"github.com/8byt/gox/ast"
 	"github.com/8byt/gox/token"
@@ -889,7 +888,7 @@ func (p *printer) expr1(expr ast.Expr, prec1, depth int) {
 
 	case *ast.GoxExpr:
 		if p.Mode&GoxToGo != 0 {
-			p.expr(goxToVecty(x))
+			p.expr(goxToVecty(p.Config.Genname, x))
 		} else {
 			// print the gox version instead
 			p.print("<")

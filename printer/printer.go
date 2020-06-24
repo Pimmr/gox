@@ -1247,10 +1247,14 @@ type Config struct {
 	Mode     Mode // default: 0
 	Tabwidth int  // default: 8
 	Indent   int  // default: 0 (all code is indented at least by this much)
+	Genname  string
 }
 
 // fprint implements Fprint and takes a nodesSizes map for setting up the printer state.
 func (cfg *Config) fprint(output io.Writer, fset *token.FileSet, node interface{}, nodeSizes map[ast.Node]int) (err error) {
+	if cfg.Genname == "" {
+		cfg.Genname = "vecty"
+	}
 	// print node
 	var p printer
 	p.init(cfg, fset, nodeSizes)
