@@ -71,7 +71,10 @@ var attrMap = map[string]string{
 }
 
 func goxToVecty(genname string, gox *ast.GoxExpr) ast.Expr {
-	isComponent := unicode.IsUpper(rune(gox.TagName.Name[0]))
+	isComponent := true
+	if t, ok := gox.TagName.(*ast.Ident); ok {
+		isComponent = unicode.IsUpper(rune(t.Name[0]))
+	}
 
 	if isComponent {
 		return newComponent(genname, gox)
@@ -79,7 +82,7 @@ func goxToVecty(genname string, gox *ast.GoxExpr) ast.Expr {
 		args := []ast.Expr{
 			&ast.BasicLit{
 				Kind:  token.STRING,
-				Value: strconv.Quote(gox.TagName.Name),
+				Value: strconv.Quote(gox.TagName.(*ast.Ident).Name),
 			}}
 
 		if len(gox.Attrs) > 0 {
@@ -148,8 +151,8 @@ func newCallExpr(fun ast.Expr, args []ast.Expr) *ast.CallExpr {
 }
 
 func newComponent(genname string, gox *ast.GoxExpr) ast.Expr {
-	var args []ast.Expr
-	for _, attr := range gox.Attrs {
+	args := make([]ast.Expr, len(gox.Attrs))
+	for i, attr := range gox.Attrs {
 		if attr.Rhs == nil { // default to true like JSX
 			attr.Rhs = ast.NewIdent("true")
 		}
@@ -159,7 +162,7 @@ func newComponent(genname string, gox *ast.GoxExpr) ast.Expr {
 			Value: attr.Rhs,
 		}
 
-		args = append(args, expr)
+		args[i] = expr
 	}
 
 	if len(gox.X) != 0 {
@@ -181,6 +184,22 @@ func newComponent(genname string, gox *ast.GoxExpr) ast.Expr {
 		args = append(args, expr)
 	}
 
+	if t, ok := gox.TagName.(*ast.CallExpr); ok {
+		if len(gox.X) != 0 {
+			t.Args = append(t.Args, newCallExpr(
+				newSelectorExpr(genname, "Text"),
+				append([]ast.Expr{
+					&ast.BasicLit{
+						ValuePos: token.NoPos,
+						Value:    `""`,
+						Kind:     token.STRING,
+					},
+				}, gox.X...),
+			))
+		}
+		return t
+	}
+
 	return newCallExpr(
 		newSelectorExpr(genname, "NewComponent"),
 		[]ast.Expr{
@@ -188,7 +207,7 @@ func newComponent(genname string, gox *ast.GoxExpr) ast.Expr {
 				OpPos: token.NoPos,
 				Op:    token.AND,
 				X: &ast.CompositeLit{
-					Type:   ast.NewIdent(gox.TagName.Name),
+					Type:   ast.NewIdent(gox.TagName.(*ast.Ident).Name),
 					Lbrace: token.NoPos,
 					Elts:   args,
 					Rbrace: token.NoPos,

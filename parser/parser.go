@@ -658,7 +658,7 @@ func (p *parser) parseGoxTag() ast.Expr {
 
 	otag := p.expect(token.OTAG)
 
-	tagName := p.parseIdent()
+	tagName := p.checkExpr(p.parseExpr(false))
 
 	attrs := []*ast.GoxAttrStmt{}
 	for p.tok != token.OTAG_END && p.tok != token.OTAG_SELF_CLOSE {

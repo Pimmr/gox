@@ -310,6 +310,14 @@ func (s *Scanner) scanIdentifier() string {
 	return string(s.src[offs:s.offset])
 }
 
+func (s *Scanner) scanGoxIdentifier() string {
+	offs := s.offset
+	for isLetter(s.ch) || isDigit(s.ch) || s.ch == '.' {
+		s.next()
+	}
+	return string(s.src[offs:s.offset])
+}
+
 func digitVal(ch rune) int {
 	switch {
 	case '0' <= ch && ch <= '9':
@@ -742,7 +750,7 @@ func (s *Scanner) scanGoxTagMode() (pos token.Pos, tok token.Token, lit string) 
 
 	switch ch := s.ch; {
 	case isLetter(ch):
-		lit = s.scanIdentifier()
+		lit = s.scanGoxIdentifier()
 		tok = token.IDENT
 	default:
 		s.next()
@@ -754,6 +762,9 @@ func (s *Scanner) scanGoxTagMode() (pos token.Pos, tok token.Token, lit string) 
 		case '{':
 			tok = token.LBRACE
 			// push Go mode onto the stack
+			s.goxState.push(GO)
+		case '(':
+			tok = token.LPAREN
 			s.goxState.push(GO)
 		case '"':
 			tok = token.STRING
@@ -871,10 +882,19 @@ scanAgain:
 			tok = token.SEMICOLON
 			lit = ";"
 		case '(':
+			s.goxState.braceDepth++
 			tok = token.LPAREN
 		case ')':
 			insertSemi = true
 			tok = token.RPAREN
+			// Check to see if our depth is negative
+			s.goxState.braceDepth--
+			if s.goxState.braceDepth < 0 {
+				err := s.goxState.pop()
+				if err != nil {
+					s.error(s.offset, err.Error())
+				}
+			}
 		case '[':
 			tok = token.LBRACK
 		case ']':

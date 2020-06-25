@@ -279,7 +279,7 @@ type (
 
 	GoxExpr struct {
 		Otag    token.Pos      // position of <
-		TagName *Ident         // div
+		TagName Expr           // div
 		Attrs   []*GoxAttrStmt // props
 		X       []Expr         // expression(s) inside GoxTag or none
 		Ctag    *CtagExpr      // </asdf> or />
