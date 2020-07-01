@@ -207,7 +207,7 @@ func newComponent(genname string, gox *ast.GoxExpr) ast.Expr {
 				OpPos: token.NoPos,
 				Op:    token.AND,
 				X: &ast.CompositeLit{
-					Type:   ast.NewIdent(gox.TagName.(*ast.Ident).Name),
+					Type:   gox.TagName,
 					Lbrace: token.NoPos,
 					Elts:   args,
 					Rbrace: token.NoPos,
